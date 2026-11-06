@@ -1,0 +1,8 @@
+**
+!package.json
+!package-lock.json
+!scripts/build-frontend.mjs
+!frontend
+!wordpress
+wordpress/themes/naturedex/assets/dist
+!docker

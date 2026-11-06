@@ -1,0 +1,11 @@
+node_modules/
+.DS_Store
+.env
+.wp-local/
+wordpress/themes/naturedex/assets/dist/
+tests/.auth/
+test-results/
+playwright-report/
+infra/cdk.out/
+infra/outputs.json
+infra/node_modules/

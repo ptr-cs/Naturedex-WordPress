@@ -1,0 +1,32 @@
+{
+  "name": "naturedex-wordpress",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "npm run sprites:build && npm run check && node scripts/build-frontend.mjs",
+    "build:frontend": "node scripts/build-frontend.mjs",
+    "check": "tsc --noEmit",
+    "sprites:build": "node scripts/build-sprite-animations.mjs",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "test:a11y": "playwright test --grep accessibility",
+    "verify": "npm run build && npm test && npm run test:e2e && npm run infra:test",
+    "infra:synth": "npm --prefix infra run synth",
+    "infra:test": "npm --prefix infra test"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
+    "@playwright/test": "^1.65.0",
+    "@types/node": "^26.6.6",
+    "@wp-playground/cli": "^3.1.62",
+    "esbuild": "^0.28.2",
+    "prettier": "^3.9.10",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
+  }
+}
