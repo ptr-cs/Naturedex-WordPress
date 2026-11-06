@@ -8,7 +8,7 @@
 defined( 'ABSPATH' ) || exit;
 
 /**
- * @return string guide, map, journal, article, species, editor, about, page, or 404.
+ * @return string guide, map, journal, article, species, editor, about, status, page, or 404.
  */
 function naturedex_view(): string {
 	if ( is_front_page() ) {
@@ -23,7 +23,7 @@ function naturedex_view(): string {
 	if ( is_singular( 'species' ) ) {
 		return 'species';
 	}
-	foreach ( array( 'map', 'editor', 'about' ) as $slug ) {
+	foreach ( array( 'map', 'editor', 'about', 'status' ) as $slug ) {
 		if ( is_page( $slug ) ) {
 			return $slug;
 		}
@@ -90,6 +90,13 @@ function naturedex_heading(): array {
 			'title'       => 'Made for the curious.',
 			'description' => 'An original, pocket-sized guide to the animals that make Virginia home.',
 			'stamp'       => 'globe',
+		),
+		'status'  => array(
+			'crumb'       => 'SYSTEM STATUS',
+			'eyebrow'     => 'FIELD STATION DIAGNOSTICS',
+			'title'       => 'System status.',
+			'description' => 'How the site, its tests, and its deployments are doing.',
+			'stamp'       => '',
 		),
 		'page'    => array(
 			'crumb'       => 'FIELD GUIDE',

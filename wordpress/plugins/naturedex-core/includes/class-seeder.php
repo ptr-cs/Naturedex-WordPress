@@ -16,6 +16,7 @@ final class Seeder {
 		'journal'     => 'Field journal',
 		'editor'      => 'Writing desk',
 		'about'       => 'About this field guide',
+		'status'      => 'System status',
 	);
 
 	/**

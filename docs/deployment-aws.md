@@ -155,6 +155,8 @@ aws ecs run-task --cluster CLUSTER --task-definition BOOTSTRAP_TASK_ARN \
 
 The admin username is `naturedex-admin`. Read the password with `aws secretsmanager get-secret-value --secret-id ADMIN_PASSWORD_SECRET_ARN`. The placeholder admin email can't receive mail, so change it in wp-admin.
 
+A new page such as `/status` also needs this task once after deploying, because seed content is imported rather than deployed. It's safe to repeat: it only adds what's missing.
+
 ### What the first deployment found
 
 | Problem | Cause | Fix |

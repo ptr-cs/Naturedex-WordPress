@@ -76,6 +76,7 @@ expect /map 200
 expect /journal 200
 expect /journal/read-the-water 200
 expect /about 200
+expect /status 200
 expect /species/red-fox 200
 expect /no-such-trail 404
 expect /editor 302

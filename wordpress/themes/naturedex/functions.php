@@ -80,12 +80,19 @@ add_filter(
 			'journal' => 'Field journal',
 			'editor'  => 'Writing desk',
 			'about'   => 'About',
+			'status'  => 'System status',
 			'404'     => 'Not found',
 		);
 		$view   = naturedex_view();
 		$name   = $labels[ $view ] ?? wp_strip_all_tags( get_the_title() );
 		return '' === $name ? $title : "{$name} · Naturedex";
 	}
+);
+
+// The status page is for people who are given the link, not for search results.
+add_filter(
+	'wp_robots',
+	static fn( array $robots ): array => 'status' === naturedex_view() ? wp_robots_no_robots( $robots ) : $robots
 );
 
 // The Writing desk is the only page that needs a session.

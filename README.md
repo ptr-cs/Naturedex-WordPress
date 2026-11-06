@@ -51,6 +51,12 @@ Species were a source-controlled JSON file in the first version. Here they are e
 
 **Your browser.** The discovery collection and motion preference stay in local storage. Neither reaches WordPress.
 
+## System status
+
+`/status` shows live site checks, test counts, and recent deployments. CI publishes a sanitized summary to the `status` branch, and WordPress reads that plus GitHub's public deployment history, caching the result for 5 minutes.
+
+The page is deliberately limited. It shows counts and yes-or-no results only, never test names, errors, logs, versions, or infrastructure details. Those rules are enforced in `Naturedex\Status`, which treats its inputs as untrusted, and in `tests/browser/status.spec.ts`.
+
 ## API
 
 Under `/wp-json/naturedex/v1`:
