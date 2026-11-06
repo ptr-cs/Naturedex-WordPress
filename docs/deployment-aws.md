@@ -4,7 +4,7 @@
 
 ## Recommendation
 
-Run WordPress as one container on ECS Fargate behind CloudFront, with RDS for MySQL and EFS for uploads. It costs **roughly $65–70 a month** at low traffic.
+Run WordPress as one container on ECS Fargate behind CloudFront, with RDS for MySQL and EFS for uploads. It costs **roughly $70 a month** at low traffic.
 
 That is several times the price of a single small server, because the design pays for replaceable servers, managed backups, and an edge firewall. If cost matters more than those, see [the cheaper alternative](#cheaper-alternative).
 
@@ -42,7 +42,7 @@ Public pages hold nothing specific to a visitor, because the nonce appears only 
 
 | Request | Behavior |
 | --- | --- |
-| Public pages | Cached for 5 minutes (404s for 1 minute) |
+| Public pages | Cached for 5 minutes (404s for 1 minute). Query strings WordPress doesn't need are ignored, so they can't force a cache miss |
 | `/wp-content/*`, `/wp-includes/*` | Cached for a day; theme assets change address with each build |
 | `/wp-admin/*`, `/wp-login.php`, `/wp-json/*`, `/editor` | Never cached |
 | Signed-in visitors on public pages | Bypass the shared cache, so draft previews work |
@@ -53,12 +53,16 @@ The last row needs a known cookie name, so `wp-config.php` fixes `COOKIEHASH`. C
 
 ## Security
 
-- WAF: AWS common, known-bad-input, and WordPress rule sets, plus rules that block XML-RPC and the web installer and limit `/wp-login.php` to 20 requests per 5 minutes per IP.
+- WAF: AWS common, known-bad-input, and WordPress rule sets, plus rules that block XML-RPC and the web installer, limit `/wp-login.php` to 20 requests per 5 minutes per IP, and limit non-asset requests to 300 per 5 minutes per IP.
+- Audit trail: CloudTrail with file validation (kept 90 days in S3), GuardDuty, and WAF logs of every request (kept 30 days). Severe GuardDuty findings go to the alarm topic. WAF logs redact `cookie`, `authorization`, and `x-wp-nonce`.
 - Two common-rule-set rules are set to count, not block: `SizeRestrictions_BODY` and `CrossSiteScripting_BODY`. Otherwise they would reject long field notes and notes that mention HTML. WordPress validates and escapes that content.
-- The web installer is blocked at both WAF and Apache. Between stack creation and the bootstrap task the database is empty, and that page would let anyone claim the site.
+- The web installer is blocked at both WAF and Apache, along with other WordPress endpoints this site doesn't use. Between stack creation and the bootstrap task the database is empty, and that page would let anyone claim the site.
 - WordPress can't change its own code on the server (`DISALLOW_FILE_MODS`), and updates arrive only through a new image.
 - PHP can't execute from uploads.
-- The plugin closes comments, pingbacks, XML-RPC methods, application passwords, anonymous user listing, and author archives.
+- The plugin closes comments, pingbacks, XML-RPC methods, application passwords, anonymous user listing, cross-origin API access, and author archives. Real and made-up author addresses return the same 404.
+- The admin password exists only in the one-off install task, not in the container that serves visitors.
+- Tasks can only reach HTTPS, the database, and EFS outbound.
+- The image applies OS security updates at build time. ECR scans each pushed image; review results after a deploy.
 - Database connections require TLS, set explicitly in a parameter group. The server certificate is not verified, because that would need the RDS CA bundle in the image. The traffic stays inside the VPC.
 - Security headers, including the CSP, are sent by CloudFront. The browser suite loads the site under that exact CSP. The policy blocks third-party embeds such as YouTube, so adding those means widening `infra/lib/csp.ts`.
 
@@ -71,26 +75,28 @@ On-demand, us-east-1, low traffic. Unit rates were checked against the [AWS publ
 | Load balancer, including light usage | $17.50 |
 | Fargate, one task around the clock | $14.40 |
 | RDS `db.t4g.micro` and 20 GB gp3 | $14.00 |
-| WAF: ACL, 6 rules, requests | $11.50 |
+| WAF: ACL, 7 rules, requests | $12.50 |
+| CloudTrail, WAF logs | $1.00 |
+| GuardDuty (free for 30 days) | $1–4 |
 | Public IPv4 address for the task | $3.65 |
 | Logs, ECR, alarms | $2.00 |
 | Secrets Manager, 3 secrets | $1.20 |
 | Scheduled cron tasks | $1.20 |
 | EFS and backups | $1.00 |
 | CloudFront at low traffic | $0–1 |
-| **Total** | **about $67** |
+| **Total** | **about $70–73** |
 
 Spending limits are set as AWS budgets on the account, not in this stack.
 
 ### Cost of a short run
 
-The stack costs about **$2.20 a day**, and charges stop when resources are deleted. The rates are hourly or prorated, except that a Route 53 hosted zone is a flat $0.50 a month.
+The stack costs about **$2.30 a day**, and charges stop when resources are deleted. The rates are hourly or prorated, except that a Route 53 hosted zone is a flat $0.50 a month.
 
 | Running time | Cost |
 | --- | ---: |
-| 7 days | about $15 |
-| 14 days | about $31 |
-| 30 days | about $66 |
+| 7 days | about $16 |
+| 14 days | about $32 |
+| 30 days | about $70 |
 
 Allow a few dollars extra for failed first attempts. A domain is optional and extra.
 
@@ -115,6 +121,10 @@ npx cdk bootstrap aws://ACCOUNT_ID/us-east-1
 # On a new account, create this first, or the first ECS deploy can fail.
 aws iam create-service-linked-role --aws-service-name ecs.amazonaws.com
 
+# Scan every image CDK pushes. Bootstrapping again can reset this.
+aws ecr put-image-scanning-configuration --repository-name ASSETS_REPOSITORY \
+  --image-scanning-configuration scanOnPush=true
+
 # The deploy role. See the template for how to find the subject.
 aws cloudformation deploy --template-file infra/github-oidc.yaml \
   --stack-name NaturedexGitHubOidc --capabilities CAPABILITY_NAMED_IAM \
@@ -138,10 +148,9 @@ The first deployment takes about 18 minutes. Small changes take a few.
 Run this once, after the first deployment, with the stack's outputs. Confirm first that `/wp-admin/install.php` returns 403.
 
 ```sh
-aws ecs run-task --cluster CLUSTER --task-definition TASK_ARN \
+aws ecs run-task --cluster CLUSTER --task-definition BOOTSTRAP_TASK_ARN \
   --launch-type FARGATE \
-  --network-configuration 'awsvpcConfiguration={subnets=[SUBNET_IDS],securityGroups=[TASK_SG],assignPublicIp=ENABLED}' \
-  --overrides '{"containerOverrides":[{"name":"wordpress","command":["naturedex-bootstrap"]}]}'
+  --network-configuration 'awsvpcConfiguration={subnets=[SUBNET_IDS],securityGroups=[TASK_SG],assignPublicIp=ENABLED}'
 ```
 
 The admin username is `naturedex-admin`. Read the password with `aws secretsmanager get-secret-value --secret-id ADMIN_PASSWORD_SECRET_ARN`. The placeholder admin email can't receive mail, so change it in wp-admin.
@@ -168,7 +177,7 @@ Verified on the live site: 33 browser checks, an uploaded image surviving a task
 
 **Release.** The Deploy workflow builds the image and rolls it out. A new task must pass health checks before the old one stops, and a failing release rolls back automatically.
 
-**Updating WordPress or PHP.** Change the versions in both `docker/Dockerfile` and `scripts/playground.mjs`, run `npm run verify`, then deploy. Nothing updates itself, so watch for WordPress security releases.
+**Updating WordPress or PHP.** Change the versions in both `docker/Dockerfile` and `scripts/playground.mjs`, run `npm run verify`, then deploy. Afterwards run `wp core update-db` in a one-off task, because `upgrade.php` is blocked. Nothing updates itself, so watch for WordPress security releases. Redeploying also rebuilds the image with current OS updates.
 
 **Backups.** RDS keeps 7 days of point-in-time recovery. AWS Backup keeps daily EFS copies for 35 days. Code is in the repository. Do one restore drill early, because an untested backup isn't a backup.
 
@@ -181,7 +190,7 @@ aws rds modify-db-instance --db-instance-identifier DB_ID --no-deletion-protecti
 npx cdk destroy
 ```
 
-This keeps data on purpose: RDS leaves a final snapshot, and EFS, its backups, and some logs remain. They keep billing until deleted by hand. Delete `NaturedexGitHubOidc` and `CDKToolkit` last if you're finished with the account.
+This keeps data on purpose: RDS leaves a final snapshot, and EFS, its backups, and some logs remain. The CloudTrail bucket is also kept, and empties itself after 90 days. They keep billing until deleted by hand. GuardDuty and CloudTrail stop with the stack. Delete `NaturedexGitHubOidc` and `CDKToolkit` last if you're finished with the account.
 
 ## Sources
 

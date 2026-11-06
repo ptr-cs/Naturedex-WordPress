@@ -66,9 +66,34 @@ test.describe('for signed-out visitors', () => {
       data: '<?xml version="1.0"?><methodCall><methodName>demo.sayHello</methodName></methodCall>',
     });
     expect(await xmlrpc.text()).toContain('faultCode');
-    const author = await request.get('/?author=1', { maxRedirects: 0 });
-    expect(author.status()).toBe(301);
-    expect(author.headers().location).not.toContain('admin');
+  });
+
+  test('usernames cannot be discovered from public addresses', async ({
+    request,
+  }) => {
+    const byId = await request.get('/?author=1', { maxRedirects: 0 });
+    expect(byId.status()).toBe(404);
+    expect(byId.headers().location).toBeUndefined();
+    const real = await request.get('/journal/author/admin', { maxRedirects: 0 });
+    const fake = await request.get('/journal/author/nobody-here', { maxRedirects: 0 });
+    expect(real.status()).toBe(404);
+    expect(fake.status()).toBe(404);
+    const oembed = await (
+      await request.get('/wp-json/oembed/1.0/embed?url=http://127.0.0.1:4322/journal/read-the-water')
+    ).json();
+    expect(oembed.title).toBeTruthy();
+    expect(oembed.author_url).toBeUndefined();
+  });
+
+  test('other sites get no cross-origin access to the API', async ({
+    request,
+  }) => {
+    const response = await request.get('/wp-json/naturedex/v1/species', {
+      headers: { Origin: 'https://unrelated.example' },
+    });
+    expect(response.ok()).toBe(true);
+    expect(response.headers()['access-control-allow-origin']).toBeUndefined();
+    expect(response.headers()['access-control-allow-credentials']).toBeUndefined();
   });
 });
 

@@ -70,26 +70,52 @@ describe('the Naturedex AWS stack', () => {
   });
 
   it('passes secrets by reference, never as plain environment values', () => {
-    const [definition] = Object.values(
+    for (const definition of Object.values(
       template.findResources('AWS::ECS::TaskDefinition'),
+    )) {
+      const [container] = definition.Properties.ContainerDefinitions;
+      const plain = container.Environment.map(
+        (entry: { Name: string }) => entry.Name,
+      );
+      expect(
+        plain.filter((name: string) => /PASSWORD|SECRET/.test(name)),
+      ).toEqual([]);
+    }
+  });
+
+  it('gives the admin password to the install task, not the web container', () => {
+    const containers = Object.values(
+      template.findResources('AWS::ECS::TaskDefinition'),
+    ).map((definition) => definition.Properties.ContainerDefinitions[0]);
+    const secrets = (container: { Secrets: Array<{ Name: string }> }) =>
+      container.Secrets.map((entry) => entry.Name);
+    const web = containers.find((container) => container.PortMappings?.length);
+    const install = containers.find((container) =>
+      container.Command?.includes('naturedex-bootstrap'),
     );
-    const container = definition.Properties.ContainerDefinitions[0];
-    const plain = container.Environment.map(
-      (entry: { Name: string }) => entry.Name,
+    expect(secrets(web)).toContain('NATUREDEX_DB_PASSWORD');
+    expect(secrets(web)).not.toContain('NATUREDEX_ADMIN_PASSWORD');
+    expect(secrets(install)).toContain('NATUREDEX_ADMIN_PASSWORD');
+  });
+
+  it('limits what a compromised task could reach', () => {
+    const groups = Object.values(
+      template.findResources('AWS::EC2::SecurityGroup', {
+        Properties: { GroupDescription: Match.stringLikeRegexp('WordPress tasks') },
+      }),
     );
-    const secret = container.Secrets.map(
-      (entry: { Name: string }) => entry.Name,
+    const open = groups[0].Properties.SecurityGroupEgress.filter(
+      (rule: { CidrIp?: string }) => rule.CidrIp === '0.0.0.0/0',
     );
-    expect(secret).toEqual(
-      expect.arrayContaining([
-        'NATUREDEX_DB_PASSWORD',
-        'NATUREDEX_AUTH_SECRET',
-        'NATUREDEX_ADMIN_PASSWORD',
+    expect(open).toEqual([expect.objectContaining({ FromPort: 443, ToPort: 443 })]);
+  });
+
+  it('drops malformed headers at the load balancer', () => {
+    template.hasResourceProperties('AWS::ElasticLoadBalancingV2::LoadBalancer', {
+      LoadBalancerAttributes: Match.arrayWith([
+        { Key: 'routing.http.drop_invalid_header_fields.enabled', Value: 'true' },
       ]),
-    );
-    expect(plain.filter((name: string) => /PASSWORD|SECRET/.test(name))).toEqual(
-      [],
-    );
+    });
   });
 
   it('separates signed-in visitors in the page cache', () => {
@@ -138,6 +164,72 @@ describe('the Naturedex AWS stack', () => {
         Match.objectLike({ Name: 'LimitLoginAttempts' }),
       ]),
     });
+  });
+
+  it('ignores query strings that could force cache misses', () => {
+    const policies = Object.values(
+      template.findResources('AWS::CloudFront::CachePolicy'),
+    ).map(
+      (policy) =>
+        policy.Properties.CachePolicyConfig
+          .ParametersInCacheKeyAndForwardedToOrigin.QueryStringsConfig,
+    );
+    expect(policies).toHaveLength(2);
+    for (const config of policies) {
+      expect(config.QueryStringBehavior).toBe('whitelist');
+      expect(config.QueryStrings).not.toContain('collection');
+    }
+  });
+
+  it('rate limits requests that reach the origin, but not cached assets', () => {
+    const [acl] = Object.values(template.findResources('AWS::WAFv2::WebACL'));
+    const rule = acl.Properties.Rules.find(
+      (entry: { Name: string }) => entry.Name === 'LimitOriginRequests',
+    );
+    expect(rule.Action).toEqual({ Block: {} });
+    expect(rule.Statement.RateBasedStatement.Limit).toBe(300);
+    expect(JSON.stringify(rule.Statement)).toContain('/wp-content/');
+    const priorities = acl.Properties.Rules.map(
+      (entry: { Priority: number }) => entry.Priority,
+    );
+    expect(new Set(priorities).size).toBe(priorities.length);
+  });
+
+  it('keeps an audit trail that can prove it was not altered', () => {
+    template.hasResourceProperties('AWS::CloudTrail::Trail', {
+      IsMultiRegionTrail: true,
+      IncludeGlobalServiceEvents: true,
+      EnableLogFileValidation: true,
+    });
+    template.hasResourceProperties('AWS::S3::Bucket', {
+      PublicAccessBlockConfiguration: Match.objectLike({
+        BlockPublicAcls: true,
+        RestrictPublicBuckets: true,
+      }),
+    });
+  });
+
+  it('detects threats and sends severe ones to the alarm topic', () => {
+    template.hasResourceProperties('AWS::GuardDuty::Detector', { Enable: true });
+    template.hasResourceProperties('AWS::Events::Rule', {
+      EventPattern: Match.objectLike({ source: ['aws.guardduty'] }),
+    });
+  });
+
+  it('logs WAF traffic without storing credentials', () => {
+    const [config] = Object.values(
+      template.findResources('AWS::WAFv2::LoggingConfiguration'),
+    );
+    const redacted = config.Properties.RedactedFields.map(
+      (field: { SingleHeader: { Name: string } }) => field.SingleHeader.Name,
+    );
+    expect(redacted).toEqual(['cookie', 'authorization', 'x-wp-nonce']);
+    expect(JSON.stringify(config.Properties.LogDestinationConfigs)).toContain(
+      'aws-waf-logs-',
+    );
+    expect(JSON.stringify(config.Properties.LogDestinationConfigs)).not.toContain(
+      ':*',
+    );
   });
 
   it('runs WordPress cron on a schedule, because cached visits cannot trigger it', () => {

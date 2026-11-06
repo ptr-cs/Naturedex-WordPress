@@ -36,6 +36,15 @@ final class Hardening {
 		// Must run before redirect_canonical, which would reveal the username in ?author=1.
 		add_action( 'template_redirect', array( self::class, 'close_author_archives' ), 1 );
 		add_filter( 'wp_sitemaps_add_provider', array( self::class, 'drop_user_sitemap' ), 10, 2 );
+		add_filter( 'oembed_response_data', array( self::class, 'drop_author_url' ) );
+
+		// Only this site's own pages use the REST API, and WordPress's default
+		// echoes any origin back with credentials allowed.
+		add_action(
+			'rest_api_init',
+			static fn() => remove_filter( 'rest_pre_serve_request', 'rest_send_cors_headers' ),
+			100
+		);
 
 		// A mistyped address should be a 404, not a guess at a similar page.
 		add_filter( 'do_redirect_guess_404_permalink', '__return_false' );
@@ -56,11 +65,24 @@ final class Hardening {
 		return $endpoints;
 	}
 
+	/**
+	 * A real author gets the same 404 as a made-up one, so these addresses can't
+	 * be used to test whether a username exists.
+	 */
 	public static function close_author_archives(): void {
 		if ( is_author() ) {
-			wp_safe_redirect( home_url( '/' ), 301 );
-			exit;
+			global $wp_query;
+			$wp_query->set_404();
+			status_header( 404 );
 		}
+	}
+
+	/**
+	 * The author URL contains the login name.
+	 */
+	public static function drop_author_url( array $data ): array {
+		unset( $data['author_url'] );
+		return $data;
 	}
 
 	public static function drop_user_sitemap( $provider, string $name ) {

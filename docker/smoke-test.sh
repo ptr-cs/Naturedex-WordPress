@@ -82,6 +82,11 @@ expect /editor 302
 expect /wp-login.php 200
 expect /xmlrpc.php 403
 expect /wp-admin/install.php 403
+expect /wp-admin/upgrade.php 403
+expect /wp-cron.php 403
+expect /wp-trackback.php 403
+expect /wp-links-opml.php 403
+expect /wp-signup.php 403
 contains / 'Meet your wild neighbors'
 contains /wp-json/naturedex/v1/regions 'Blue Ridge'
 count=$(curl -s http://127.0.0.1:8080/wp-json/naturedex/v1/species | grep -o '"dexNumber"' | wc -l)
@@ -95,4 +100,10 @@ if ! curl -sI http://127.0.0.1:8080/ | grep -qi 's-maxage=300'; then
   exit 1
 fi
 echo 'ok   public pages are cacheable'
+server=$(curl -sI http://127.0.0.1:8080/ | tr -d '\r' | awk 'tolower($1)=="server:"{print $2}')
+if [ "$server" != Apache ]; then
+  echo "FAIL server header reveals a version: $server"
+  exit 1
+fi
+echo 'ok   server header hides the version'
 echo 'Production image passed.'

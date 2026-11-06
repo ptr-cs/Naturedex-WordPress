@@ -1,5 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import {
+  ArnFormat,
   CfnOutput,
   Duration,
   IgnoreMode,
@@ -10,6 +11,7 @@ import {
   aws_certificatemanager as acm,
   aws_cloudfront as cloudfront,
   aws_cloudfront_origins as origins,
+  aws_cloudtrail as cloudtrail,
   aws_cloudwatch as cloudwatch,
   aws_cloudwatch_actions as cloudwatchActions,
   aws_ec2 as ec2,
@@ -19,10 +21,12 @@ import {
   aws_elasticloadbalancingv2 as elbv2,
   aws_events as events,
   aws_events_targets as eventTargets,
+  aws_guardduty as guardduty,
   aws_logs as logs,
   aws_rds as rds,
   aws_route53 as route53,
   aws_route53_targets as route53Targets,
+  aws_s3 as s3,
   aws_secretsmanager as secretsmanager,
   aws_sns as sns,
   aws_sns_subscriptions as subscriptions,
@@ -152,6 +156,7 @@ export class NaturedexStack extends Stack {
       vpcSubnets: privateSubnets,
       internetFacing: false,
       securityGroup: albSecurityGroup,
+      dropInvalidHeaderFields: true,
     });
     const listener = loadBalancer.addListener('Http', {
       port: 80,
@@ -190,7 +195,17 @@ export class NaturedexStack extends Stack {
       cookieBehavior: cloudfront.CacheCookieBehavior.allowList(
         'wordpress_logged_in_naturedex',
       ),
-      queryStringBehavior: cloudfront.CacheQueryStringBehavior.all(),
+      // Anything else is dropped, so a random query string can't force a cache
+      // miss. These are the ones WordPress needs for permalinks and previews.
+      // The ?collection=1 link is unaffected: it's read in the browser.
+      queryStringBehavior: cloudfront.CacheQueryStringBehavior.allowList(
+        'p',
+        'page_id',
+        'preview',
+        'preview_id',
+        'preview_nonce',
+        '_thumbnail_id',
+      ),
       headerBehavior: cloudfront.CacheHeaderBehavior.none(),
       enableAcceptEncodingGzip: true,
       enableAcceptEncodingBrotli: true,
@@ -200,7 +215,8 @@ export class NaturedexStack extends Stack {
       defaultTtl: Duration.days(1),
       maxTtl: Duration.days(30),
       cookieBehavior: cloudfront.CacheCookieBehavior.none(),
-      queryStringBehavior: cloudfront.CacheQueryStringBehavior.all(),
+      // WordPress versions assets with ?ver=.
+      queryStringBehavior: cloudfront.CacheQueryStringBehavior.allowList('ver'),
       headerBehavior: cloudfront.CacheHeaderBehavior.none(),
       enableAcceptEncodingGzip: true,
       enableAcceptEncodingBrotli: true,
@@ -280,7 +296,7 @@ export class NaturedexStack extends Stack {
     uploads.grantRootAccess(task.taskRole);
 
     const databaseSecret = database.secret!;
-    const container = task.addContainer(containerName, {
+    const containerBase = {
       image: ecs.ContainerImage.fromAsset(repositoryRoot, {
         file: 'docker/Dockerfile',
         platform: ecrAssets.Platform.LINUX_ARM64,
@@ -291,7 +307,6 @@ export class NaturedexStack extends Stack {
         streamPrefix: 'wordpress',
         logRetention: logs.RetentionDays.ONE_MONTH,
       }),
-      portMappings: [{ containerPort: 80 }],
       environment: {
         NATUREDEX_HOME_URL: homeUrl,
         NATUREDEX_DB_NAME: databaseName,
@@ -299,12 +314,16 @@ export class NaturedexStack extends Stack {
         NATUREDEX_ADMIN_USER: 'naturedex-admin',
         NATUREDEX_ADMIN_EMAIL: props.adminEmail,
       },
-      secrets: {
-        NATUREDEX_DB_USER: ecs.Secret.fromSecretsManager(databaseSecret, 'username'),
-        NATUREDEX_DB_PASSWORD: ecs.Secret.fromSecretsManager(databaseSecret, 'password'),
-        NATUREDEX_AUTH_SECRET: ecs.Secret.fromSecretsManager(authSecret),
-        NATUREDEX_ADMIN_PASSWORD: ecs.Secret.fromSecretsManager(adminPassword),
-      },
+    };
+    const siteSecrets = {
+      NATUREDEX_DB_USER: ecs.Secret.fromSecretsManager(databaseSecret, 'username'),
+      NATUREDEX_DB_PASSWORD: ecs.Secret.fromSecretsManager(databaseSecret, 'password'),
+      NATUREDEX_AUTH_SECRET: ecs.Secret.fromSecretsManager(authSecret),
+    };
+    const container = task.addContainer(containerName, {
+      ...containerBase,
+      portMappings: [{ containerPort: 80 }],
+      secrets: siteSecrets,
     });
     container.addMountPoints({
       sourceVolume: 'uploads',
@@ -312,11 +331,37 @@ export class NaturedexStack extends Stack {
       readOnly: false,
     });
 
+    // The admin password is only needed to install WordPress, so the container
+    // that faces visitors never holds it.
+    const bootstrapTask = new ecs.FargateTaskDefinition(this, 'BootstrapTask', {
+      cpu: 512,
+      memoryLimitMiB: 1024,
+      runtimePlatform: {
+        cpuArchitecture: ecs.CpuArchitecture.ARM64,
+        operatingSystemFamily: ecs.OperatingSystemFamily.LINUX,
+      },
+    });
+    bootstrapTask.addContainer(containerName, {
+      ...containerBase,
+      command: ['naturedex-bootstrap'],
+      secrets: {
+        ...siteSecrets,
+        NATUREDEX_ADMIN_PASSWORD: ecs.Secret.fromSecretsManager(adminPassword),
+      },
+    });
+
     const taskSecurityGroup = new ec2.SecurityGroup(this, 'TaskSg', {
       vpc,
-      allowAllOutbound: true,
+      // HTTPS reaches ECR, Secrets Manager, and logs. The database and EFS rules
+      // below add their own outbound ports.
+      allowAllOutbound: false,
       description: 'WordPress tasks; inbound only from the load balancer',
     });
+    taskSecurityGroup.addEgressRule(
+      ec2.Peer.anyIpv4(),
+      ec2.Port.tcp(443),
+      'AWS service endpoints',
+    );
     const service = new ecs.FargateService(this, 'Service', {
       cluster,
       taskDefinition: task,
@@ -372,6 +417,7 @@ export class NaturedexStack extends Stack {
       ],
     });
 
+    this.createAuditLogging(webAcl);
     this.createAlerts(props, targets, loadBalancer, database);
 
     if (zone) {
@@ -386,7 +432,9 @@ export class NaturedexStack extends Stack {
 
     new CfnOutput(this, 'SiteUrl', { value: homeUrl });
     new CfnOutput(this, 'ClusterName', { value: cluster.clusterName });
-    new CfnOutput(this, 'TaskDefinitionArn', { value: task.taskDefinitionArn });
+    new CfnOutput(this, 'BootstrapTaskDefinitionArn', {
+      value: bootstrapTask.taskDefinitionArn,
+    });
     new CfnOutput(this, 'TaskSecurityGroupId', {
       value: taskSecurityGroup.securityGroupId,
     });
@@ -400,6 +448,15 @@ export class NaturedexStack extends Stack {
 
   private responseHeaders(name: string, withCsp: boolean) {
     return new cloudfront.ResponseHeadersPolicy(this, `${name}Headers`, {
+      customHeadersBehavior: {
+        customHeaders: [
+          {
+            header: 'Permissions-Policy',
+            value: 'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
+            override: true,
+          },
+        ],
+      },
       securityHeadersBehavior: {
         strictTransportSecurity: {
           accessControlMaxAge: Duration.days(365),
@@ -455,6 +512,14 @@ export class NaturedexStack extends Stack {
       },
       visibilityConfig: visibility(name),
     });
+    const assetPrefix = (path: string) => ({
+      byteMatchStatement: {
+        fieldToMatch: { uriPath: {} },
+        positionalConstraint: 'STARTS_WITH',
+        searchString: path,
+        textTransformations: [{ priority: 0, type: 'NONE' }],
+      },
+    });
     const pathIs = (path: string, constraint: string) => ({
       byteMatchStatement: {
         fieldToMatch: { uriPath: {} },
@@ -499,16 +564,95 @@ export class NaturedexStack extends Stack {
           },
           visibilityConfig: visibility('LimitLoginAttempts'),
         },
+        // Some requests always reach the origin, such as made-up addresses and
+        // forged session cookies. A page view is one such request and its assets
+        // are excluded, so this only stops someone hammering a small server.
+        {
+          name: 'LimitOriginRequests',
+          priority: 3,
+          action: { block: {} },
+          statement: {
+            rateBasedStatement: {
+              aggregateKeyType: 'IP',
+              evaluationWindowSec: 300,
+              limit: 300,
+              scopeDownStatement: {
+                notStatement: {
+                  statement: {
+                    orStatement: {
+                      statements: [
+                        assetPrefix('/wp-content/'),
+                        assetPrefix('/wp-includes/'),
+                      ],
+                    },
+                  },
+                },
+              },
+            },
+          },
+          visibilityConfig: visibility('LimitOriginRequests'),
+        },
         // Field notes are long, and may legitimately contain HTML as text. These
         // two rules would block ordinary saves; WordPress validates that content.
-        managed(3, 'AWSManagedRulesCommonRuleSet', [
+        managed(4, 'AWSManagedRulesCommonRuleSet', [
           'SizeRestrictions_BODY',
           'CrossSiteScripting_BODY',
         ]),
-        managed(4, 'AWSManagedRulesKnownBadInputsRuleSet'),
-        managed(5, 'AWSManagedRulesWordPressRuleSet'),
+        managed(5, 'AWSManagedRulesKnownBadInputsRuleSet'),
+        managed(6, 'AWSManagedRulesWordPressRuleSet'),
       ],
     });
+  }
+
+  /**
+   * Records who changed the account, what reached the site, and suspicious
+   * activity. Logs must not become a new place to steal sessions from, so the
+   * WAF log drops the headers that carry credentials.
+   */
+  private createAuditLogging(webAcl: wafv2.CfnWebACL) {
+    const trailBucket = new s3.Bucket(this, 'AuditTrail', {
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      enforceSSL: true,
+      lifecycleRules: [{ expiration: Duration.days(90) }],
+      // Evidence should outlive the stack. It expires by itself after 90 days.
+      removalPolicy: RemovalPolicy.RETAIN,
+    });
+    new cloudtrail.Trail(this, 'Trail', {
+      bucket: trailBucket,
+      isMultiRegionTrail: true,
+      includeGlobalServiceEvents: true,
+      enableFileValidation: true,
+    });
+
+    new guardduty.CfnDetector(this, 'ThreatDetection', {
+      enable: true,
+      findingPublishingFrequency: 'FIFTEEN_MINUTES',
+    });
+
+    // WAF requires this name prefix.
+    const logGroupName = 'aws-waf-logs-naturedex';
+    const wafLogs = new logs.LogGroup(this, 'WafLogs', {
+      logGroupName,
+      retention: logs.RetentionDays.ONE_MONTH,
+      removalPolicy: RemovalPolicy.DESTROY,
+    });
+    const logging = new wafv2.CfnLoggingConfiguration(this, 'WafLogging', {
+      resourceArn: webAcl.attrArn,
+      // WAF rejects the ":*" suffix that logGroupArn ends with.
+      logDestinationConfigs: [
+        this.formatArn({
+          service: 'logs',
+          resource: 'log-group',
+          resourceName: logGroupName,
+          arnFormat: ArnFormat.COLON_RESOURCE_NAME,
+        }),
+      ],
+      redactedFields: ['cookie', 'authorization', 'x-wp-nonce'].map((Name) => ({
+        singleHeader: { Name },
+      })),
+    });
+    logging.node.addDependency(wafLogs);
   }
 
   private createAlerts(
@@ -521,6 +665,15 @@ export class NaturedexStack extends Stack {
     if (props.alarmEmail)
       topic.addSubscription(new subscriptions.EmailSubscription(props.alarmEmail));
     const action = new cloudwatchActions.SnsAction(topic);
+    new events.Rule(this, 'SevereThreats', {
+      description: 'Sends high-severity GuardDuty findings to the alarm topic',
+      eventPattern: {
+        source: ['aws.guardduty'],
+        detailType: ['GuardDuty Finding'],
+        detail: { severity: [{ numeric: ['>=', 7] }] },
+      },
+      targets: [new eventTargets.SnsTopic(topic)],
+    });
     const alarm = (
       id: string,
       metric: cloudwatch.IMetric,
