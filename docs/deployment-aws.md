@@ -169,6 +169,9 @@ The admin username is `naturedex-admin`. Read the password with `aws secretsmana
 - The rate limit on `/wp-login.php`, because triggering it would block the tester's address.
 - The block editor screen itself. Saving block content through the REST API passes the WAF, but the WAF's managed rules could still react to other wp-admin requests.
 - A restore from backup.
+- Whether the two WAF rate limits trigger. Doing so would block the tester's address.
+
+**Open image findings.** The November 6 scan reports 1 critical, 12 high, 34 medium, and 8 low findings in Debian 13 packages. The build applies every available update, and the five CVEs checked against Debian's tracker have no stable fix yet. The critical one is in the `tiffcrop` tool, which isn't in the image (only the `libtiff6` library is). Redeploy shortly before an important date to pick up fixes, then review the scan.
 
 Verified on the live site: 33 browser checks, an uploaded image surviving a task replacement, and a scheduled post published by the EventBridge cron task.
 - Manual accessibility checks, recorded in [accessibility.md](accessibility.md).
