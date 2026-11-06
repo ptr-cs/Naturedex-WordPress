@@ -163,7 +163,6 @@ Everything in the application was tested on Playground. None of the following ha
 | Docker image build | Medium. Docker isn't available on this machine, so the Dockerfile has never run | `docker build`, then the checks above |
 | MySQL | Low. All queries go through WordPress APIs, but tests used SQLite | First deployment, or a local MySQL container |
 | `wp-config.php` | Medium. Parsed on PHP 8.4 but never executed | First boot |
-| Load balancer security group | Medium. It allows the VPC's address range, while AWS documents the CloudFront prefix list or service security group. If CloudFront gets 504s, change this first. After deployment it can be tightened to `CloudFront-VPCOrigins-Service-SG` | First request |
 | WAF rule behavior | Medium. Managed rules can block legitimate wp-admin requests, especially in the block editor | Save posts in the block editor, and check sampled requests |
 | Stack deployment | Medium. CDK and its tests check the template, not that AWS accepts it | `cdk deploy` |
 

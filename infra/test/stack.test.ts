@@ -48,6 +48,14 @@ describe('the Naturedex AWS stack', () => {
     expect(open).toEqual([]);
   });
 
+  it('admits CloudFront to the load balancer through AWS\'s managed list', () => {
+    template.hasResourceProperties('AWS::EC2::SecurityGroupIngress', {
+      Description: 'CloudFront VPC origin',
+      SourcePrefixListId: Match.stringLikeRegexp('^pl-'),
+      FromPort: 80,
+    });
+  });
+
   it('protects stored data from stack deletion', () => {
     template.hasResource('AWS::RDS::DBInstance', {
       DeletionPolicy: 'Snapshot',

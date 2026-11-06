@@ -45,6 +45,9 @@ export interface NaturedexStackProps extends StackProps {
 
 const containerName = 'wordpress';
 const databaseName = 'wordpress';
+// com.amazonaws.global.cloudfront.origin-facing in us-east-1. Prefix list IDs
+// differ by region, and this stack only runs in us-east-1.
+const cloudFrontOriginFacingPrefixList = 'pl-3b927c52';
 const repositoryRoot = fileURLToPath(new URL('../../', import.meta.url));
 
 /**
@@ -136,10 +139,11 @@ export class NaturedexStack extends Stack {
       allowAllOutbound: true,
       description: 'Internal load balancer reached through CloudFront VPC origin',
     });
-    // The load balancer has no public address. CloudFront reaches it through
-    // network interfaces it places in this VPC.
+    // The load balancer has no public address. AWS documents this managed list
+    // for VPC origins; unlike the service security group, it exists before the
+    // distribution does. Allowing the VPC's own range did not admit CloudFront.
     albSecurityGroup.addIngressRule(
-      ec2.Peer.ipv4(vpc.vpcCidrBlock),
+      ec2.Peer.prefixList(cloudFrontOriginFacingPrefixList),
       ec2.Port.tcp(80),
       'CloudFront VPC origin',
     );
