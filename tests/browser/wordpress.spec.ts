@@ -11,6 +11,9 @@ test.describe('for signed-out visitors', () => {
   }) => {
     await page.goto('/editor');
     await expect(page).toHaveURL(/wp-login\.php/);
+    // WordPress focuses and selects this field shortly after load, which would
+    // otherwise pull in whatever is being typed into the password field.
+    await expect(page.getByLabel('Username or Email Address')).toBeFocused();
     await page.getByLabel('Username or Email Address').fill('admin');
     await page.getByLabel('Password', { exact: true }).fill('password');
     await page.getByRole('button', { name: 'Log In' }).click();
