@@ -1,1 +1,29 @@
-{}
+{
+  "at": "2026-11-06T19:56:10.704Z",
+  "commit": "7d03fab",
+  "suites": {
+    "unit": {
+      "passed": 21,
+      "failed": 0
+    },
+    "infrastructure": {
+      "passed": 23,
+      "failed": 0
+    },
+    "browser": {
+      "passed": 41,
+      "failed": 0
+    },
+    "accessibility": {
+      "passed": 7,
+      "failed": 0
+    }
+  },
+  "image": "passed",
+  "history": [
+    {
+      "at": "2026-11-06T19:56:10.704Z",
+      "ok": true
+    }
+  ]
+}
