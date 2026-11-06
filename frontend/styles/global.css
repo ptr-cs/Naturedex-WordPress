@@ -2488,3 +2488,11 @@ a.species-title {
   font-size: 13px;
   font-weight: 700;
 }
+.source-links {
+  gap: 2px;
+}
+.source-links a {
+  display: flex;
+  align-items: center;
+  min-height: 24px;
+}
