@@ -191,7 +191,8 @@ final class Status {
 	 */
 	private static function site_checks(): array {
 		global $wpdb;
-		$uploads = wp_upload_dir( null, false );
+		// Creates this month's folder, so a site with no uploads yet still passes.
+		$uploads = wp_upload_dir();
 		$jobs    = _get_cron_array();
 		$next    = is_array( $jobs ) && $jobs ? (int) array_key_first( $jobs ) : 0;
 
@@ -206,7 +207,7 @@ final class Status {
 			),
 			array(
 				'label' => 'Media storage',
-				'ok'    => wp_is_writable( $uploads['basedir'] ),
+				'ok'    => empty( $uploads['error'] ) && wp_is_writable( $uploads['path'] ),
 			),
 			array(
 				'label' => 'Scheduled jobs',
