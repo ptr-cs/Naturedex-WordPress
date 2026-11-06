@@ -2,14 +2,21 @@
 #
 #   aws cloudformation deploy --template-file infra/github-oidc.yaml \
 #     --stack-name NaturedexGitHubOidc --capabilities CAPABILITY_NAMED_IAM \
-#     --parameter-overrides Repository=OWNER/REPOSITORY
+#     --parameter-overrides Repository=SUBJECT
+#
+# SUBJECT must match the repository's token exactly. Newer repositories use
+# immutable subjects that include IDs, such as owner@123/name@456. Find it with:
+#
+#   gh api repos/OWNER/NAME/actions/oidc/customization/sub --jq .sub_claim_prefix
+#
+# and drop the leading "repo:".
 AWSTemplateFormatVersion: '2010-09-09'
 Description: GitHub Actions deploy role for Naturedex WordPress
 
 Parameters:
   Repository:
     Type: String
-    Description: The only repository allowed to deploy, as owner/name
+    Description: The only repository allowed to deploy, as it appears in its OIDC subject
 
 Resources:
   GitHubProvider:
