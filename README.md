@@ -4,7 +4,7 @@ A Virginia wildlife field guide with an original Game Boy Advance–inspired loo
 
 This is the WordPress implementation of [Naturedex](../Naturedex), built for comparison with the Astro/React/Drupal original. It reuses that project's species data, journal posts, sprites, CSS, and test scenarios. Its frontend is deliberately different: **PHP templates and plain TypeScript, with no UI framework.**
 
-Nothing here has been deployed. The AWS plan is in [docs/deployment-aws.md](docs/deployment-aws.md).
+It runs on AWS through GitHub Actions. See [docs/deployment-aws.md](docs/deployment-aws.md).
 
 ## Run it locally
 
@@ -29,7 +29,7 @@ Open **http://127.0.0.1:4321**. The first start downloads WordPress and seeds th
 | Theme | `wordpress/themes/naturedex` | PHP templates that render every page |
 | Frontend | `frontend/` | TypeScript behavior, bundled into the theme by esbuild |
 | Production image | `docker/` | Apache and PHP image, configured by environment variables |
-| Infrastructure | `infra/` | AWS CDK stack (synthesizes offline; no deploy script) |
+| Infrastructure | `infra/` | AWS CDK stack, deployed by the manual GitHub Actions workflow |
 
 **Rendering.** PHP produces all the HTML, so pages work without JavaScript. TypeScript then adds filtering, the seen collection, dialogs, sprite motion, and the Writing desk. It moves and updates server-rendered elements rather than rebuilding them. A species entry is rendered once by PHP, into both its own page and the `<template>` that a dialog clones.
 
@@ -88,7 +88,7 @@ Seed data can also be imported with `wp naturedex seed`. It only adds what is mi
 
 Results from the last full run are in [docs/comparison.md](docs/comparison.md#measured-results).
 
-**Tests run on SQLite, not MySQL.** Playground uses WordPress's SQLite integration, so the suite proves the application against WordPress 7.1.4 and PHP 8.4 but not against the production database. Other parts that have not run are listed under [what has not been tested](docs/deployment-aws.md#what-has-not-been-tested).
+**The browser suite runs on SQLite.** Playground uses WordPress's SQLite integration. CI separately boots the production image against MySQL with `docker/smoke-test.sh`. What remains untested is listed under [what has not been tested](docs/deployment-aws.md#what-has-not-been-tested).
 
 Passing automated scans is not a WCAG or Section 508 conformance claim. Manual checks are recorded as not evaluated in [docs/accessibility.md](docs/accessibility.md).
 

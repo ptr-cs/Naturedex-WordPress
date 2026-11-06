@@ -11,6 +11,9 @@ if ! wp core is-installed; then
     --admin_password="$NATUREDEX_ADMIN_PASSWORD" \
     --admin_email="$NATUREDEX_ADMIN_EMAIL" \
     --skip-email
+  # The display name appears on field notes and would otherwise be the username.
+  wp user update "$NATUREDEX_ADMIN_USER" \
+    --display_name='Naturedex Field Notes' --nickname='Naturedex Field Notes'
 fi
 wp plugin activate naturedex-core
 wp theme activate naturedex

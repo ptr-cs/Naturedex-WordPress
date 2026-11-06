@@ -1,6 +1,6 @@
 # AWS deployment plan
 
-**Status: planned, not deployed.** No AWS account has been touched. The stack in `infra/` synthesizes and passes its tests offline, and the repository has no deploy script.
+**Status: deployed** to us-east-1 on November 6, 2026, through the manual Deploy workflow in GitHub Actions. The stack is meant to run around an interview and then be torn down.
 
 ## Recommendation
 
@@ -80,7 +80,7 @@ On-demand, us-east-1, low traffic. Unit rates were checked against the [AWS publ
 | CloudFront at low traffic | $0–1 |
 | **Total** | **about $67** |
 
-A budget alert is set at $100 (`monthlyBudgetUsd`), and it fires on forecast spend.
+Spending limits are set as AWS budgets on the account, not in this stack.
 
 ### Cost of a short run
 
@@ -102,73 +102,71 @@ After `cdk destroy`, the retained RDS snapshot ($0.095 per GB-month), EFS data, 
 
 A single Lightsail WordPress instance would likely cost roughly a fifth as much (from memory, so check current prices). The trade-offs: you patch the server yourself, the database and uploads live on that one machine, there's no WAF, and an instance failure means restoring from a snapshot. This suits a personal site, and the plugin and theme install there unchanged. Only `docker/` and `infra/` are specific to Fargate.
 
-## Decisions needed before deploying
+## Deployment
 
-1. **Which domain?** Without one, the site uses a `cloudfront.net` address. If you use a domain, it needs a Route 53 hosted zone.
-2. **Which addresses** receive alarms and own the admin account?
-3. **Which AWS account,** and does it have a dedicated deployment role?
-4. **Where is the image built?** Deployment needs Docker, which this machine doesn't have. Options are installing it locally or adding CI such as GitHub Actions or CodeBuild.
+GitHub Actions does the work, so Docker isn't needed locally. CI runs every test, then boots the production image against MySQL with TLS required (`docker/smoke-test.sh`). The Deploy workflow is started by hand and signs in to AWS through OIDC, with no stored keys.
 
-## Deployment runbook
-
-Not yet run. Treat the first pass as a test, and expect to fix things.
+### One-time setup
 
 ```sh
-# 1. Tools: AWS CLI, Docker, credentials for the target account.
 cd infra && npm ci
-
-# 2. One time per account and region.
 npx cdk bootstrap aws://ACCOUNT_ID/us-east-1
 
-# 3. Review what will be created.
-npx cdk diff \
-  -c adminEmail=you@example.com -c alarmEmail=you@example.com \
-  -c domainName=naturedex.example.com \
-  -c hostedZoneId=Z0000000000 -c hostedZoneName=example.com
+# On a new account, create this first, or the first ECS deploy can fail.
+aws iam create-service-linked-role --aws-service-name ecs.amazonaws.com
 
-# 4. Create it, with the same context values. Run this yourself, deliberately.
-npx cdk deploy -c ...
+# The deploy role. See the template for how to find the subject.
+aws cloudformation deploy --template-file infra/github-oidc.yaml \
+  --stack-name NaturedexGitHubOidc --capabilities CAPABILITY_NAMED_IAM \
+  --parameter-overrides Repository=SUBJECT
 
-# 5. Install and seed WordPress, using the stack's outputs.
+gh variable set AWS_DEPLOY_ROLE_ARN --body ROLE_ARN
+```
+
+The role trusts only the `main` branch of this repository, and can only assume the CDK bootstrap roles.
+
+### Each deployment
+
+```sh
+gh workflow run deploy.yml
+```
+
+The first deployment takes about 18 minutes. Small changes take a few.
+
+### First install
+
+Run this once, after the first deployment, with the stack's outputs. Confirm first that `/wp-admin/install.php` returns 403.
+
+```sh
 aws ecs run-task --cluster CLUSTER --task-definition TASK_ARN \
   --launch-type FARGATE \
   --network-configuration 'awsvpcConfiguration={subnets=[SUBNET_IDS],securityGroups=[TASK_SG],assignPublicIp=ENABLED}' \
   --overrides '{"containerOverrides":[{"name":"wordpress","command":["naturedex-bootstrap"]}]}'
-
-# 6. Read the admin password, sign in at /editor, and change it.
-aws secretsmanager get-secret-value --secret-id ADMIN_PASSWORD_SECRET_ARN
 ```
 
-The admin username is `naturedex-admin`. Set your display name in wp-admin, because the author name appears on field notes. Confirm the SNS email subscription so alarms arrive.
+The admin username is `naturedex-admin`. Read the password with `aws secretsmanager get-secret-value --secret-id ADMIN_PASSWORD_SECRET_ARN`. The placeholder admin email can't receive mail, so change it in wp-admin.
 
-### First-deployment checks
+### What the first deployment found
 
-- [ ] `/wp-admin/install.php` and `/xmlrpc.php` return 403 **before** running the bootstrap task
-- [ ] The site loads over HTTPS, with no redirect loop
-- [ ] Sign in, then create, publish, and delete a field note from the Writing desk
-- [ ] Upload an image in wp-admin, then replace the task and confirm the image survives
-- [ ] A second `curl -I` of `/` shows `x-cache: Hit from cloudfront`
-- [ ] A signed-in response is `no-store`, and draft preview works
-- [ ] A long field note saves without a WAF block
-- [ ] A scheduled post publishes within 15 minutes
-- [ ] Twenty-plus bad logins get blocked
-- [ ] Run the browser suite's scenarios against the site, including axe scans
+| Problem | Cause | Fix |
+| --- | --- | --- |
+| Deploy role was rejected | New repositories use GitHub's immutable OIDC subject, which includes IDs | Trust the exact subject from the GitHub API |
+| Pages timed out through CloudFront | VPC origin traffic arrives from CloudFront addresses, not the VPC range | Allow the managed prefix list `com.amazonaws.global.cloudfront.origin-facing` |
+| Author name leaked the username | WordPress defaults the display name to the login | Set it during bootstrap |
+| Dialog source links were 11px tall | Original CSS. Mac fonts hid it; CI's Linux fonts exposed it | 24px minimum target |
 
 ## What has not been tested
 
-Everything in the application was tested on Playground. None of the following has been run:
+- The rate limit on `/wp-login.php`, because triggering it would block the tester's address.
+- The block editor screen itself. Saving block content through the REST API passes the WAF, but the WAF's managed rules could still react to other wp-admin requests.
+- A restore from backup.
 
-| Not tested | Risk | How it will be confirmed |
-| --- | --- | --- |
-| Docker image build | Medium. Docker isn't available on this machine, so the Dockerfile has never run | `docker build`, then the checks above |
-| MySQL | Low. All queries go through WordPress APIs, but tests used SQLite | First deployment, or a local MySQL container |
-| `wp-config.php` | Medium. Parsed on PHP 8.4 but never executed | First boot |
-| WAF rule behavior | Medium. Managed rules can block legitimate wp-admin requests, especially in the block editor | Save posts in the block editor, and check sampled requests |
-| Stack deployment | Medium. CDK and its tests check the template, not that AWS accepts it | `cdk deploy` |
+Verified on the live site: 33 browser checks, an uploaded image surviving a task replacement, and a scheduled post published by the EventBridge cron task.
+- Manual accessibility checks, recorded in [accessibility.md](accessibility.md).
 
 ## Operations
 
-**Release.** `cdk deploy` builds the image and rolls it out. A new task must pass health checks before the old one stops, and a failing release rolls back automatically.
+**Release.** The Deploy workflow builds the image and rolls it out. A new task must pass health checks before the old one stops, and a failing release rolls back automatically.
 
 **Updating WordPress or PHP.** Change the versions in both `docker/Dockerfile` and `scripts/playground.mjs`, run `npm run verify`, then deploy. Nothing updates itself, so watch for WordPress security releases.
 
@@ -176,7 +174,14 @@ Everything in the application was tested on Playground. None of the following ha
 
 **Availability.** Single task and Single-AZ database. Expect short interruptions during an AZ failure or database maintenance, though CloudFront keeps serving recently cached pages only until they expire. For higher availability, raise `desiredCount` to 2 and enable `multiAz`; EFS already supports this.
 
-**Teardown.** `cdk destroy` keeps the data on purpose: the RDS instance has deletion protection and leaves a snapshot, and EFS is retained. Those keep costing money until removed by hand. CloudFront VPC origins can also take a while to delete.
+**Teardown.** The database has deletion protection, so turn that off first, then destroy the stack from `infra/`:
+
+```sh
+aws rds modify-db-instance --db-instance-identifier DB_ID --no-deletion-protection --apply-immediately
+npx cdk destroy
+```
+
+This keeps data on purpose: RDS leaves a final snapshot, and EFS, its backups, and some logs remain. They keep billing until deleted by hand. Delete `NaturedexGitHubOidc` and `CDKToolkit` last if you're finished with the account.
 
 ## Sources
 
