@@ -31,6 +31,10 @@ Open **http://127.0.0.1:4321**. The first start downloads WordPress and seeds th
 | Production image | `docker/` | Apache and PHP image, configured by environment variables |
 | Infrastructure | `infra/` | AWS CDK stack, deployed by the manual GitHub Actions workflow |
 
+![Naturedex WordPress on AWS: CloudFront and WAF in front of an internal load balancer, ECS Fargate, RDS MySQL, and EFS, deployed from GitHub Actions](docs/architecture.png)
+
+The AWS deployment is described in [docs/deployment-aws.md](docs/deployment-aws.md).
+
 **Rendering.** PHP produces all the HTML, so pages work without JavaScript. TypeScript then adds filtering, the seen collection, dialogs, sprite motion, and the Writing desk. It moves and updates server-rendered elements rather than rebuilding them. A species entry is rendered once by PHP, into both its own page and the `<template>` that a dialog clones.
 
 **Content model.**

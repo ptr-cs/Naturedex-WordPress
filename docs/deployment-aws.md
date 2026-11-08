@@ -10,6 +10,8 @@ That is several times the price of a single small server, because the design pay
 
 ## Architecture
 
+![AWS architecture diagram](architecture.png)
+
 ```
 Visitor ──HTTPS──▶ CloudFront + WAF
                       │  VPC origin (no public load balancer)
