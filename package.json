@@ -23,7 +23,7 @@
     "@axe-core/playwright": "^4.14.0",
     "@playwright/test": "^1.65.0",
     "@types/node": "^26.6.6",
-    "@wp-playground/cli": "^3.1.62",
+    "@wp-playground/cli": "^3.1.63",
     "esbuild": "^0.28.2",
     "prettier": "^3.9.10",
     "typescript": "^7.0.2",
