@@ -51,6 +51,7 @@ final class Admin {
 		add_action( 'add_meta_boxes', array( self::class, 'add_boxes' ) );
 		add_action( 'save_post_' . Content_Model::POST_TYPE, array( self::class, 'save_species' ), 10, 2 );
 		add_action( 'save_post_post', array( self::class, 'save_related' ), 10, 2 );
+		add_action( 'save_post_page', array( self::class, 'save_page_heading' ), 10, 2 );
 		add_action( Content_Model::TAX_REGION . '_add_form_fields', array( self::class, 'region_add_fields' ) );
 		add_action( Content_Model::TAX_REGION . '_edit_form_fields', array( self::class, 'region_edit_fields' ) );
 		add_action( 'created_' . Content_Model::TAX_REGION, array( self::class, 'save_region' ) );
@@ -60,6 +61,42 @@ final class Admin {
 	public static function add_boxes(): void {
 		add_meta_box( 'naturedex_species', __( 'Field guide entry', 'naturedex' ), array( self::class, 'species_box' ), Content_Model::POST_TYPE, 'normal', 'high' );
 		add_meta_box( 'naturedex_related', __( 'Related species', 'naturedex' ), array( self::class, 'related_box' ), 'post', 'side' );
+		add_meta_box( 'naturedex_page_heading', __( 'Page heading', 'naturedex' ), array( self::class, 'page_heading_box' ), 'page', 'normal', 'high' );
+	}
+
+	/**
+	 * The eyebrow, heading, and introduction shown above a page's content.
+	 */
+	public static function page_heading_box( WP_Post $post ): void {
+		wp_nonce_field( self::NONCE, self::NONCE );
+		echo '<input type="hidden" name="naturedex_page_heading_present" value="1">';
+		echo '<p>' . esc_html__( 'Shown above the page content. Leave Heading blank to use the page title.', 'naturedex' ) . '</p>';
+		echo '<table class="form-table" role="presentation">';
+		foreach ( Site_Copy::PAGE_META as $key => $label ) {
+			$value = (string) get_post_meta( $post->ID, $key, true );
+			if ( 'naturedex_intro' === $key ) {
+				self::textarea_row( $key, $label, $value );
+			} else {
+				self::input_row( $key, $label, $value );
+			}
+		}
+		echo '</table>';
+	}
+
+	public static function save_page_heading( int $post_id, WP_Post $post ): void {
+		// The block editor saves meta boxes in a second request; this field marks it.
+		if ( ! isset( $_POST['naturedex_page_heading_present'] ) || ! self::can_save( $post_id ) ) {
+			return;
+		}
+		foreach ( array_keys( Site_Copy::PAGE_META ) as $key ) {
+			$raw   = (string) wp_unslash( $_POST[ $key ] ?? '' );
+			$value = 'naturedex_intro' === $key ? sanitize_textarea_field( $raw ) : sanitize_text_field( $raw );
+			if ( '' === trim( $value ) ) {
+				delete_post_meta( $post_id, $key );
+			} else {
+				update_post_meta( $post_id, $key, $value );
+			}
+		}
 	}
 
 	public static function species_box( WP_Post $post ): void {

@@ -66,7 +66,7 @@ $naturedex_nav     = array(
 		</div>
 		<div class="sidebar-bottom">
 			<div class="little-grass" aria-hidden="true">♧ ♧ ♧</div>
-			<p>A little curiosity.<br>A whole wild world.</p>
+			<p><?php echo naturedex_lines( Naturedex\Site_Copy::get( 'tagline' ) ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped per line. ?></p>
 			<a href="<?php echo esc_url( home_url( '/about' ) ); ?>"><?php naturedex_icon( 'info', 15 ); ?> About this field guide</a>
 			<a href="<?php echo esc_url( home_url( '/status' ) ); ?>"><?php naturedex_icon( 'check', 15 ); ?> System status</a>
 			<span class="local-indicator"><span></span>POWERED BY WORDPRESS</span>

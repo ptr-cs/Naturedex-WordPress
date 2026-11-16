@@ -27,11 +27,13 @@ require_once DIR . '/includes/class-admin.php';
 require_once DIR . '/includes/class-hardening.php';
 require_once DIR . '/includes/class-seeder.php';
 require_once DIR . '/includes/class-status.php';
+require_once DIR . '/includes/class-site-copy.php';
 
 Content_Model::register_hooks();
 Rest::register_hooks();
 Admin::register_hooks();
 Hardening::register_hooks();
+Site_Copy::register_hooks();
 
 if ( defined( 'WP_CLI' ) && WP_CLI ) {
 	require_once DIR . '/includes/class-cli.php';

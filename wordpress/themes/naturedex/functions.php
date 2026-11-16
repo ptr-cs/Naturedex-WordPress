@@ -51,7 +51,7 @@ add_action(
 add_action(
 	'wp_head',
 	static function () {
-		$description = 'A little curiosity. A whole wild world. Explore Virginia’s wildlife, keep a field collection, and read field notes in Naturedex.';
+		$description = Naturedex\Site_Copy::get( 'meta_description' );
 		if ( is_singular( 'post' ) ) {
 			$description = get_the_excerpt();
 		}

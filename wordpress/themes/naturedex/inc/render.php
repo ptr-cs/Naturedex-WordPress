@@ -160,3 +160,10 @@ function naturedex_map_outline(): string {
 	}
 	return implode( ' ', $rings );
 }
+
+/**
+ * Escapes text and keeps an editor's line breaks, for short copy like the tagline.
+ */
+function naturedex_lines( string $text ): string {
+	return implode( '<br>', array_map( 'esc_html', preg_split( '/\R/', $text ) ) );
+}

@@ -225,3 +225,61 @@ test('regions keep their map fields in wp-admin', async ({ page }) => {
   await expect(page.getByLabel('Short name')).toHaveValue('Valley');
   await expect(page.getByLabel('Legend color (hex)')).toHaveValue('#c2c778');
 });
+
+test('site copy and page headings are edited in WordPress', async ({
+  page,
+  request,
+}) => {
+  const headers = {
+    'X-WP-Nonce': (await (await request.get('/wp-admin/admin-ajax.php?action=rest-nonce')).text()).trim(),
+  };
+  const settings = async (copy?: Record<string, string>) =>
+    (
+      await (copy
+        ? request.post('/wp-json/wp/v2/settings', { headers, data: { naturedex_site_copy: copy } })
+        : request.get('/wp-json/wp/v2/settings', { headers }))
+    ).json();
+  const original = (await settings()).naturedex_site_copy;
+  expect(original.tagline).toBe('A little curiosity.\nA whole wild world.');
+  const [about] = await (
+    await request.get('/wp-json/wp/v2/pages?slug=about&context=edit', { headers })
+  ).json();
+  expect(about.meta.naturedex_heading).toBe('Made for the curious.');
+  const setHeading = (meta: Record<string, string>) =>
+    request.post(`/wp-json/wp/v2/pages/${about.id}`, { headers, data: { meta } });
+
+  await settings({
+    tagline: 'Look closer.\nListen longer.',
+    footer_motto: 'Leave the trail better.',
+    // A blank field keeps what was there.
+    meta_description: '',
+  });
+  await setHeading({
+    naturedex_eyebrow: 'A NEW EYEBROW',
+    naturedex_heading: 'Edited in WordPress.',
+    naturedex_intro: 'An introduction from the page.',
+  });
+  try {
+    await page.goto('/about');
+    await expect(page.getByRole('heading', { level: 1, name: 'Edited in WordPress.' })).toBeVisible();
+    await expect(page.locator('.page-heading .eyebrow')).toContainText('A NEW EYEBROW');
+    await expect(page.locator('.page-description')).toHaveText('An introduction from the page.');
+    await expect(page.locator('.sidebar-bottom p')).toHaveText('Look closer.Listen longer.');
+    expect(await page.locator('.sidebar-bottom p').innerHTML()).toBe('Look closer.<br>Listen longer.');
+    await expect(page.locator('.page-footer')).toContainText('Leave the trail better.');
+    await expect(page.locator('meta[name="description"]')).toHaveAttribute('content', original.meta_description);
+
+    // The page's own form in wp-admin shows the same fields.
+    await page.goto(`/wp-admin/post.php?post=${about.id}&action=edit`);
+    await expect(page.getByLabel('Eyebrow')).toHaveValue('A NEW EYEBROW');
+  } finally {
+    await settings(original);
+    await setHeading({
+      naturedex_eyebrow: about.meta.naturedex_eyebrow,
+      naturedex_heading: about.meta.naturedex_heading,
+      naturedex_intro: about.meta.naturedex_intro,
+    });
+  }
+  await page.goto('/about');
+  await expect(page.getByRole('heading', { level: 1, name: 'Made for the curious.' })).toBeVisible();
+});

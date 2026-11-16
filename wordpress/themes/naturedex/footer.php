@@ -10,7 +10,7 @@ defined( 'ABSPATH' ) || exit;
 			<footer class="page-footer">
 				<span>NATUREDEX <span class="footer-star">✦</span> VIRGINIA EDITION</span>
 				<a href="<?php echo esc_url( home_url( '/status' ) ); ?>">System status</a>
-				<span>Take only memories. Leave only footprints.</span>
+				<span><?php echo esc_html( Naturedex\Site_Copy::get( 'footer_motto' ) ); ?></span>
 			</footer>
 		</main>
 	</div>

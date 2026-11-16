@@ -45,7 +45,11 @@ The AWS deployment is described in [docs/deployment-aws.md](docs/deployment-aws.
 | Animal groups, regions | Custom taxonomies (regions hold map position and color as term metadata) |
 | Field notes | Core posts and categories, stored as native blocks |
 | Related species | Post metadata holding species IDs, so renaming a species keeps its links |
-| Field guide, map, journal, Writing desk, About | Core pages (About is edited as normal WordPress content) |
+| Field guide, map, journal, Writing desk, About | Core pages (About's body is normal WordPress content) |
+| A page's eyebrow, heading, and introduction | Page metadata, in the page's **Page heading** box (blank Heading uses the title) |
+| Sidebar tagline, footer line, default search description | One option, `naturedex_site_copy`, in **Appearance → Customize → Site copy** (administrators) |
+
+Layout, navigation, sprites, and map positions stay in the theme. A site that predates editable copy gets it the first time the plugin loads: the option is created and the About page keeps the heading it showed, without changing anything already edited.
 
 Species were a source-controlled JSON file in the first version. Here they are edited in wp-admin, and the JSON is only seed data.
 

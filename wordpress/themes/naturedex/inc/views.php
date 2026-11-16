@@ -5,6 +5,8 @@
  * @package Naturedex
  */
 
+use Naturedex\Site_Copy;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -53,6 +55,10 @@ function naturedex_heading(): array {
 		'description' => 'Small observations. Good questions. Stories worth stepping outside for.',
 		'stamp'       => 'pen',
 	);
+	// A page's eyebrow, heading, and introduction are edited on the page.
+	$page     = in_array( $view, array( 'about', 'page' ), true )
+		? Site_Copy::page_heading( (int) get_queried_object_id() )
+		: array();
 	$headings = array(
 		'guide'   => array(
 			'crumb'       => 'FIELD GUIDE',
@@ -85,12 +91,9 @@ function naturedex_heading(): array {
 			'stamp'       => '',
 		),
 		'about'   => array(
-			'crumb'       => 'ABOUT',
-			'eyebrow'     => 'A FIELD GUIDE, WITH A LITTLE NOSTALGIA',
-			'title'       => 'Made for the curious.',
-			'description' => 'An original, pocket-sized guide to the animals that make Virginia home.',
-			'stamp'       => 'globe',
-		),
+			'crumb' => 'ABOUT',
+			'stamp' => 'globe',
+		) + $page,
 		'status'  => array(
 			'crumb'       => 'SYSTEM STATUS',
 			'eyebrow'     => 'FIELD STATION DIAGNOSTICS',
@@ -99,12 +102,9 @@ function naturedex_heading(): array {
 			'stamp'       => '',
 		),
 		'page'    => array(
-			'crumb'       => 'FIELD GUIDE',
-			'eyebrow'     => 'NATUREDEX',
-			'title'       => wp_strip_all_tags( get_the_title() ),
-			'description' => '',
-			'stamp'       => '',
-		),
+			'crumb' => 'FIELD GUIDE',
+			'stamp' => '',
+		) + $page,
 		'404'     => array(
 			'crumb'       => 'FIELD GUIDE',
 			'eyebrow'     => 'OFF THE MAP',

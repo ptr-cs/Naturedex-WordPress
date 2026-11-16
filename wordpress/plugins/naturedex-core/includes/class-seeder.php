@@ -19,6 +19,13 @@ final class Seeder {
 		'status'      => 'System status',
 	);
 
+	/** The About page's heading, set when the page is created. Editors change it on the page. */
+	public const ABOUT_HEADING = array(
+		'naturedex_eyebrow' => 'A FIELD GUIDE, WITH A LITTLE NOSTALGIA',
+		'naturedex_heading' => 'Made for the curious.',
+		'naturedex_intro'   => 'An original, pocket-sized guide to the animals that make Virginia home.',
+	);
+
 	/**
 	 * @return array{species: int, posts: int, pages: int} Number of records created.
 	 */
@@ -56,6 +63,7 @@ final class Seeder {
 		update_option( 'default_comment_status', 'closed' );
 		update_option( 'default_ping_status', 'closed' );
 		update_option( 'users_can_register', 0 );
+		Site_Copy::install();
 		global $wp_rewrite;
 		$wp_rewrite->init();
 		Content_Model::register();
@@ -210,7 +218,7 @@ final class Seeder {
 						'post_title'   => $title,
 						'post_name'    => $slug,
 						'post_content' => 'about' === $slug ? self::about_content() : '',
-						'meta_input'   => array( Content_Model::META_SEED => $slug ),
+						'meta_input'   => array( Content_Model::META_SEED => $slug ) + ( 'about' === $slug ? self::ABOUT_HEADING : array() ),
 					)
 				),
 				true
