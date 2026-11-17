@@ -1,6 +1,6 @@
 # Naturedex — WordPress edition
 
-A Virginia wildlife field guide with an original Game Boy Advance–inspired look: 24 animated pixel-art animals, a linked region map, a personal discovery collection, and a field journal.
+A Virginia wildlife field guide with an original Game Boy Advance–inspired look: 32 animated pixel-art animals, a linked region map, a personal discovery collection, and a field journal.
 
 This is the WordPress implementation of [Naturedex](../Naturedex), built for comparison with the Astro/React/Drupal original. It reuses that project's species data, journal posts, sprites, CSS, and test scenarios. Its frontend is deliberately different: **PHP templates and plain TypeScript, with no UI framework.**
 

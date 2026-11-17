@@ -1,5 +1,8 @@
+import { readFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 import { contentSecurityPolicy } from '../../infra/lib/csp';
+
+const speciesCount = (JSON.parse(readFileSync(new URL('../../wordpress/plugins/naturedex-core/data/species.json', import.meta.url), 'utf8')) as unknown[]).length;
 
 const anonymous = { cookies: [], origins: [] };
 
@@ -135,7 +138,7 @@ test.describe('without JavaScript', () => {
 
   test('the guide, entries, and journal are all readable', async ({ page }) => {
     await page.goto('/');
-    await expect(page.locator('.species-card')).toHaveCount(24);
+    await expect(page.locator('.species-card')).toHaveCount(speciesCount);
     await expect(page.getByLabel('Search the field guide')).toBeHidden();
     await page.getByRole('link', { name: 'View Red Fox' }).click();
     await expect(page).toHaveURL(/\/species\/red-fox$/);

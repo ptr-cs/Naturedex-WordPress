@@ -1,9 +1,12 @@
+import { readFileSync } from 'node:fs';
 import {
   expect,
   request as playwrightRequest,
   test,
   type APIRequestContext,
 } from '@playwright/test';
+
+const speciesCount = (JSON.parse(readFileSync(new URL('../../wordpress/plugins/naturedex-core/data/species.json', import.meta.url), 'utf8')) as unknown[]).length;
 
 const api = '/wp-json/naturedex/v1';
 
@@ -242,7 +245,7 @@ test.describe('public read API', () => {
   test('serves the seeded catalog and journal', async () => {
     const { context } = await session();
     const species = await (await context.get(`${api}/species`)).json();
-    expect(species).toHaveLength(24);
+    expect(species).toHaveLength(speciesCount);
     expect(species[0].dexNumber).toBe(1);
     const regions = await (await context.get(`${api}/regions`)).json();
     expect(regions.map((region: { id: string }) => region.id)).toEqual([
