@@ -90,12 +90,14 @@ expect /wp-links-opml.php 403
 expect /wp-signup.php 403
 contains / 'Meet your wild neighbors'
 contains /wp-json/naturedex/v1/regions 'Blue Ridge'
-count=$(curl -s http://127.0.0.1:8080/wp-json/naturedex/v1/species | grep -o '"dexNumber"' | wc -l)
-if [ "$count" -ne 24 ]; then
-  echo "FAIL expected 24 species, got $count"
+# Every seeded species, counted from the seed data rather than a fixed number.
+seeded=$(grep -o '"dexNumber"' "$(dirname "$0")/../wordpress/plugins/naturedex-core/data/species.json" | wc -l | tr -d ' ')
+count=$(curl -s http://127.0.0.1:8080/wp-json/naturedex/v1/species | grep -o '"dexNumber"' | wc -l | tr -d ' ')
+if [ "$count" -ne "$seeded" ]; then
+  echo "FAIL expected $seeded species, got $count"
   exit 1
 fi
-echo 'ok   24 species'
+echo "ok   $count species"
 if ! curl -sI http://127.0.0.1:8080/ | grep -qi 's-maxage=300'; then
   echo 'FAIL public pages must be cacheable'
   exit 1
