@@ -1,0 +1,24 @@
+name: WordPress security releases
+
+# Nothing on the site updates itself (DISALLOW_FILE_MODS), so this checks,
+# daily. A failed run is emailed to the repository owner. It is separate from
+# CI and Deploy, so a waiting release never blocks either.
+on:
+  schedule:
+    - cron: '37 13 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Check the pinned WordPress release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - run: node scripts/check-wordpress-release.mjs

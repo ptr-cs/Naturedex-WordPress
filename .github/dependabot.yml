@@ -4,6 +4,12 @@ updates:
     directory: /
     schedule:
       interval: weekly
+  # The WordPress, WP-CLI and Node base images. A WordPress bump also needs
+  # WORDPRESS_VERSION in scripts/playground.mjs, so local tests run the same release.
+  - package-ecosystem: docker
+    directory: /docker
+    schedule:
+      interval: weekly
   - package-ecosystem: npm
     directories:
       - /
