@@ -1,6 +1,6 @@
 {
-  "at": "2026-11-16T19:45:41.691Z",
-  "commit": "43b7d5b",
+  "at": "2026-11-17T02:52:58.096Z",
+  "commit": "d51f14b",
   "suites": {
     "unit": {
       "passed": 21,
@@ -19,8 +19,12 @@
       "failed": 0
     }
   },
-  "image": "passed",
+  "image": "failed",
   "history": [
+    {
+      "at": "2026-11-17T02:52:58.096Z",
+      "ok": false
+    },
     {
       "at": "2026-11-16T19:45:41.691Z",
       "ok": true
