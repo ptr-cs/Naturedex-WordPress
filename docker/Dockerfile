@@ -2,7 +2,7 @@
 # WordPress and PHP versions must match scripts/playground.mjs, which is what the
 # automated tests run against.
 
-FROM node:24-slim AS frontend
+FROM node:26-slim AS frontend
 WORKDIR /build
 COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts
