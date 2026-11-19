@@ -12,7 +12,7 @@ RUN node scripts/build-frontend.mjs
 
 FROM wordpress:cli-2.12.0-php8.4 AS cli
 
-FROM wordpress:7.1.4-php8.4-apache
+FROM wordpress:7.1.5-php8.4-apache
 # The base image only gets OS fixes when it's republished, so apply them here.
 # Rebuilding picks up new ones.
 RUN apt-get update \

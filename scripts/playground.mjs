@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 export const root = fileURLToPath(new URL('../', import.meta.url));
 
 // Keep in step with the production image in docker/Dockerfile.
-const WORDPRESS_VERSION = '7.1.4';
+const WORDPRESS_VERSION = '7.1.5';
 const PHP_VERSION = '8.4';
 
 // Playground sets PHP_SELF to the request path. WordPress reads that as a request
